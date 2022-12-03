@@ -8,6 +8,7 @@ const PORT = 8080;
 const sseRoute = "/stream";
 
 let data;
+let streamsCount = 0;
 
 class SSE extends EventEmitter {
   constructor() {
@@ -25,6 +26,7 @@ class SSE extends EventEmitter {
     let id = 0;
 
     function dataListener(data) {
+      console.log("data l", data);
       if (data.event !== undefined) {
         res.write(`event: ${data.event}\n`);
       }
@@ -38,10 +40,15 @@ class SSE extends EventEmitter {
 
     req.on("close", () => {
       this.removeListener("data", dataListener);
+      streamsCount--;
     });
+
+    streamsCount++;
+    console.log(`streams count: ${streamsCount}`);
   }
 
   send(data) {
+    console.log("send", data);
     this.emit("data", data);
   }
 }
