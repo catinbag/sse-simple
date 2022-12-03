@@ -4,31 +4,21 @@ const {
   HTTP2_HEADER_PATH,
   HTTP2_HEADER_AUTHORITY,
   HTTP_STATUS_OK,
+  HTTP_STATUS_SEE_OTHER,
 } = http2.constants;
-const fs = require("fs");
-const path = require("path");
+const { readFileSync, createReadStream } = require("fs");
+const { join } = require("path");
 const EventEmitter = require("events").EventEmitter;
-
-const PORT = 8080;
-
-const sseRoute = "/stream";
+const { parseCookie } = require("./utils");
 
 let data;
-let streamsCount = 0;
-
-const parseCookie = (str) =>
-  str
-    .split(";")
-    .map((v) => v.split("="))
-    .reduce((acc, v) => {
-      acc[decodeURIComponent(v[0].trim())] = decodeURIComponent(v[1].trim());
-      return acc;
-    }, {});
 
 class SSE extends EventEmitter {
   constructor() {
     super();
   }
+
+  streamsCount = 0;
 
   init(stream, headers) {
     stream.respond({
@@ -36,18 +26,18 @@ class SSE extends EventEmitter {
       "Cache-Control": "no-cache",
     });
 
-    console.log("headers", headers);
-
     const cookie = headers.cookie ? parseCookie(headers.cookie) : {};
 
     let id = 0;
 
-    function dataListener(data) {
-      if (data.event !== undefined) {
-        stream.write(`event: ${data.event}\n`);
+    function dataListener(listenerData) {
+      if (listenerData.event !== undefined) {
+        stream.write(`event: ${listenerData.event}\n`);
       }
 
-      stream.write(`data: user ${cookie.name ?? "no-user"} ${data.data}\n`);
+      stream.write(
+        `data: user ${cookie.name ?? "no-user"} ${listenerData.data}\n`
+      );
       stream.write(`id: ${id++}\n`);
       stream.write(`\n`);
     }
@@ -56,67 +46,75 @@ class SSE extends EventEmitter {
 
     stream.on("close", () => {
       this.removeListener("data", dataListener);
-      streamsCount--;
+      this.streamsCount--;
     });
 
-    streamsCount++;
-    console.log(`streams count: ${streamsCount}`);
+    this.streamsCount++;
+    console.log(`streams count: ${this.streamsCount}`);
   }
 
-  send(data) {
-    console.log("send", data);
-    this.emit("data", data);
+  send(sendData) {
+    this.emit("data", sendData);
   }
 }
 
 const sse = new SSE();
 
+const ROUTES = {
+  main: "/",
+  sse: "/stream",
+  login: "/login",
+  message: "/send-msg",
+};
+
 const server = http2.createSecureServer({
-  key: fs.readFileSync("localhost-privkey.pem"),
-  cert: fs.readFileSync("localhost-cert.pem"),
+  key: readFileSync("localhost-privkey.pem"),
+  cert: readFileSync("localhost-cert.pem"),
 });
 
-server
-  .on("stream", (stream, headers) => {
-    const scheme = headers[HTTP2_HEADER_SCHEME];
-    const authority = headers[HTTP2_HEADER_AUTHORITY];
-    const urlPath = headers[HTTP2_HEADER_PATH];
+function onStream(stream, headers) {
+  const scheme = headers[HTTP2_HEADER_SCHEME];
+  const authority = headers[HTTP2_HEADER_AUTHORITY];
+  const urlPath = headers[HTTP2_HEADER_PATH];
 
-    const url = new URL(`${scheme}://${authority}${urlPath}`);
+  const url = new URL(`${scheme}://${authority}${urlPath}`);
 
-    if (url.pathname === sseRoute) {
-      sse.init(stream, headers);
+  if (url.pathname === ROUTES.sse) {
+    sse.init(stream, headers);
 
-      return;
-    }
+    return;
+  }
 
-    if (url.pathname === "/login") {
-      const name = url.searchParams.get("name");
-      stream.respond({
-        "set-cookie": `name=${name}`,
-        ":status": "303",
-        location: "/",
-      });
+  if (url.pathname === ROUTES.login) {
+    const name = url.searchParams.get("name");
+    stream.respond({
+      "set-cookie": `name=${name}`,
+      ":status": HTTP_STATUS_SEE_OTHER,
+      location: ROUTES.main,
+    });
 
-      return;
-    }
+    return;
+  }
 
-    if (url.pathname === "/send-msg") {
-      data = url.searchParams.get("message");
-      sse.send({ data });
-      stream.respond({
-        ":status": HTTP_STATUS_OK,
-      });
-      stream.end("ok");
+  if (url.pathname === ROUTES.message) {
+    data = url.searchParams.get("message");
+    sse.send({ data });
+    stream.respond({
+      ":status": HTTP_STATUS_OK,
+    });
+    stream.end("ok");
 
-      return;
-    }
+    return;
+  }
 
-    const filePath = path.join(__dirname, "index.html");
+  const filePath = join(__dirname, "index.html");
 
-    const fileStream = fs.createReadStream(filePath);
-    fileStream.pipe(stream);
-  })
-  .listen(PORT, () => {
-    console.log(`server started at port ${PORT}`);
-  });
+  const fileStream = createReadStream(filePath);
+  fileStream.pipe(stream);
+}
+
+const PORT = 8080;
+
+server.on("stream", onStream).listen(PORT, () => {
+  console.log(`server started at port ${PORT}`);
+});
