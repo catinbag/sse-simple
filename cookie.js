@@ -1,10 +1,12 @@
 function parseCookie(str) {
-  str
+  return str
     .split(";")
     .map((v) => v.split("="))
-    .reduce((acc, v) => {
-      const [key, value] = v;
+    .reduce((acc, val) => {
+      const [key, value] = val;
+
       acc[decodeURIComponent(key.trim())] = decodeURIComponent(value.trim());
+
       return acc;
     }, {});
 }
