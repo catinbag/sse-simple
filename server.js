@@ -12,17 +12,17 @@ const { SSE } = require("./sse");
 
 const sse = new SSE();
 
+const server = http2.createSecureServer({
+  key: readFileSync("localhost-privkey.pem"),
+  cert: readFileSync("localhost-cert.pem"),
+});
+
 const ROUTES = {
   main: "/",
   sse: "/stream",
   login: "/login",
   message: "/send-msg",
 };
-
-const server = http2.createSecureServer({
-  key: readFileSync("localhost-privkey.pem"),
-  cert: readFileSync("localhost-cert.pem"),
-});
 
 function onStream(stream, headers) {
   const scheme = headers[HTTP2_HEADER_SCHEME];
@@ -60,7 +60,6 @@ function onStream(stream, headers) {
   }
 
   const filePath = join(__dirname, "index.html");
-
   const fileStream = createReadStream(filePath);
   fileStream.pipe(stream);
 }
