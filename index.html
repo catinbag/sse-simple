@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SSE simple</title>
+  </head>
+  <body>
+    <h1>SSE worked!</h1>
+    <div id="sse-data"></div>
+
+    <script>
+      const eventSource = new EventSource("http://localhost:8080/stream");
+
+      const sseEl = document.getElementById("sse-data");
+
+      eventSource.onmessage = (message) => {
+        sseEl.innerText = `s-id: ${message.lastEventId}, s-data: ${message.data}`;
+      };
+
+      eventSource.addEventListener("end-of-stream", (message) => {
+        console.log("end");
+        eventSource.close();
+      });
+    </script>
+  </body>
+</html>
