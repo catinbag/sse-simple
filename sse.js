@@ -40,13 +40,10 @@ class SSE extends EventEmitter {
         stream.write(createEventRow(listenerData.event));
       }
 
-      console.log("listerner cookie", cookie);
-
       const localData = `user ${cookie.name ?? "no-user"} ${listenerData.data}`;
-      console.log("localData", localData);
       stream.write(createDataRow(localData));
       stream.write(createIdRow(id++));
-      stream.write(createRow());
+      stream.write(createRow(""));
     }
 
     this.on("data", dataListener);

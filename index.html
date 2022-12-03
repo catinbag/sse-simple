@@ -13,12 +13,6 @@
     <script>
       const eventSourceUrl = "https://localhost:8080/stream";
       const eventSource = new EventSource(eventSourceUrl);
-      console.log(`stream 1 created`);
-
-      for (let i = 2; i < 8; i++) {
-        new EventSource(eventSourceUrl);
-        console.log(`stream ${i} created`);
-      }
 
       const sseEl = document.getElementById("sse-data");
 
