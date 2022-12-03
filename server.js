@@ -10,8 +10,6 @@ const { readFileSync, createReadStream } = require("fs");
 const { join } = require("path");
 const { SSE } = require("./sse");
 
-const sse = new SSE();
-
 const server = http2.createSecureServer({
   key: readFileSync("localhost-privkey.pem"),
   cert: readFileSync("localhost-cert.pem"),
@@ -23,6 +21,8 @@ const ROUTES = {
   login: "/login",
   message: "/send-msg",
 };
+
+const sse = new SSE();
 
 function onStream(stream, headers) {
   const scheme = headers[HTTP2_HEADER_SCHEME];
