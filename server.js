@@ -1,60 +1,71 @@
-const http = require("http");
-const fs = require("fs");
-const path = require("path");
+const http2 = require("http2");
+const {
+  HTTP2_HEADER_SCHEME,
+  HTTP2_HEADER_PATH,
+  HTTP2_HEADER_AUTHORITY,
+  HTTP_STATUS_OK,
+  HTTP_STATUS_SEE_OTHER,
+} = http2.constants;
+const { readFileSync, createReadStream } = require("fs");
+const { join } = require("path");
+const { SSE } = require("./sse");
+
+const server = http2.createSecureServer({
+  key: readFileSync("localhost-privkey.pem"),
+  cert: readFileSync("localhost-cert.pem"),
+});
+
+const ROUTES = {
+  main: "/",
+  sse: "/stream",
+  login: "/login",
+  message: "/send-msg",
+};
+
+const sse = new SSE();
+
+function onStream(stream, headers) {
+  const scheme = headers[HTTP2_HEADER_SCHEME];
+  const authority = headers[HTTP2_HEADER_AUTHORITY];
+  const urlPath = headers[HTTP2_HEADER_PATH];
+
+  const url = new URL(`${scheme}://${authority}${urlPath}`);
+
+  if (url.pathname === ROUTES.sse) {
+    sse.init(stream, headers);
+
+    return;
+  }
+
+  if (url.pathname === ROUTES.login) {
+    const name = url.searchParams.get("name");
+    stream.respond({
+      "set-cookie": `name=${name}`,
+      ":status": HTTP_STATUS_SEE_OTHER,
+      location: ROUTES.main,
+    });
+
+    return;
+  }
+
+  if (url.pathname === ROUTES.message) {
+    const data = url.searchParams.get("message");
+    sse.send({ data });
+    stream.respond({
+      ":status": HTTP_STATUS_OK,
+    });
+    stream.end("ok");
+
+    return;
+  }
+
+  const filePath = join(__dirname, "index.html");
+  const fileStream = createReadStream(filePath);
+  fileStream.pipe(stream);
+}
 
 const PORT = 8080;
 
-const sseRoute = "/stream";
-
-let data;
-
-function sse(req, res) {
-  res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache");
-  res.setHeader("Connection", "keep-alive");
-
-  let id = 0;
-
-  const timer = setInterval(() => {
-    if (data !== undefined && data !== "") {
-      res.write(`data: ${data}\n`);
-      res.write(`id: ${id++}\n`);
-      res.write(`\n`);
-    }
-  }, 2_000);
-
-  // setTimeout(() => {
-  //   clearInterval(timer);
-  //   res.write(`event: end-of-stream\n`);
-  //   res.write(`data: end\n`);
-  //   res.write(`\n`);
-
-  //   res.end("ok");
-  // }, 5_000);
-}
-
-http
-  .createServer((req, res) => {
-    const url = new URL(`http://${req.headers.host}${req.url}`);
-
-    if (url.pathname === sseRoute) {
-      sse(req, res);
-
-      return;
-    }
-
-    if (url.pathname === "/send-msg") {
-      data = url.searchParams.get("message");
-      res.end(data);
-
-      return;
-    }
-
-    const filePath = path.join(__dirname, "index.html");
-
-    const fileStream = fs.createReadStream(filePath);
-    fileStream.pipe(res);
-  })
-  .listen(PORT, () => {
-    console.log(`server started at port ${PORT}`);
-  });
+server.on("stream", onStream).listen(PORT, () => {
+  console.log(`server started at port ${PORT}`);
+});
